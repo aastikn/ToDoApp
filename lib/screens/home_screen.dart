@@ -10,7 +10,8 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final todos = ref.watch(todoProvider);
+    final todoState = ref.watch(todoProvider);
+    final todos = todoState.todos;
 
     return Scaffold(
       appBar: AppBar(
@@ -19,29 +20,22 @@ class HomeScreen extends ConsumerWidget {
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
-                case 'sort':
-                  ref.read(todoProvider.notifier).sortByPriority();
+                case 'clear':
+                  ref.read(todoProvider.notifier).clearState();
                   break;
-                case 'completed':
-                  ref.read(todoProvider.notifier).filterByStatus(true);
-                  break;
-                case 'pending':
-                  ref.read(todoProvider.notifier).filterByStatus(false);
+                case 'logout':
+                // Handle logout
                   break;
               }
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
-                value: 'sort',
-                child: Text('Sort by Priority'),
+                value: 'clear',
+                child: Text('Clear All'),
               ),
               const PopupMenuItem(
-                value: 'completed',
-                child: Text('Show Completed'),
-              ),
-              const PopupMenuItem(
-                value: 'pending',
-                child: Text('Show Pending'),
+                value: 'logout',
+                child: Text('Logout'),
               ),
             ],
           ),

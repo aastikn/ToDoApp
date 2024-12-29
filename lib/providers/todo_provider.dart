@@ -1,71 +1,148 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/todo.dart';
 
-final todoProvider = StateNotifierProvider<TodoNotifier, List<Todo>>((ref) {
+final todoProvider = StateNotifierProvider<TodoNotifier, TodoState>((ref) {
   return TodoNotifier();
 });
 
-class TodoNotifier extends StateNotifier<List<Todo>> {
-  TodoNotifier() : super([]) {
-    _loadTodos();
+class TodoNotifier extends StateNotifier<TodoState> {
+  final _storage = const FlutterSecureStorage();
+
+  TodoNotifier() : super(TodoState(todos: [], jwt: '')) {
+    _loadFromJWT();
   }
 
-  Future<void> _loadTodos() async {
-    final prefs = await SharedPreferences.getInstance();
-    final todosJson = prefs.getStringList('todos') ?? [];
-    state = todosJson
-        .map((todo) => Todo.fromJson(json.decode(todo)))
-        .toList();
+  Future<void> _loadFromJWT() async {
+    try {
+      final jwt = await _storage.read(key: 'todo_jwt');
+
+      if (jwt != null) {
+        final decodedToken = JwtDecoder.decode(jwt);
+        final todosJson = decodedToken['todos'] as List<dynamic>?;
+
+        if (todosJson != null) {
+          final todosList = todosJson
+              .map((todo) => Todo.fromJson(todo as Map<String, dynamic>?))
+              .where((todo) => todo != null)
+              .toList();
+
+          state = TodoState(todos: todosList, jwt: jwt);
+
+          Fluttertoast.showToast(
+              msg: "succesfully loaded jwt from storage",
+              toastLength: Toast.LENGTH_SHORT,
+              gravity: ToastGravity.CENTER,
+              timeInSecForIosWeb: 1,
+              textColor: Colors.white,
+              fontSize: 16.0
+          );
+
+        }
+      }
+    } catch (e) {
+      print('Error loading JWT: $e');
+      state = TodoState(todos: [], jwt: '');
+    }
   }
 
-  Future<void> _saveTodos() async {
-    final prefs = await SharedPreferences.getInstance();
-    final todosJson = state
-        .map((todo) => json.encode(todo.toJson()))
-        .toList();
-    await prefs.setStringList('todos', todosJson);
+  Future<void> _saveToJWT() async {
+    try {
+      final todos = state.todos.map((todo) => todo.toJson()).toList();
+
+      final payload = {
+        'todos': todos,
+        'iat': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'exp': DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch ~/ 1000,
+      };
+
+      final jwt = base64Url.encode(utf8.encode(json.encode(payload)));
+
+      await _storage.write(key: 'todo_jwt', value: jwt);
+      state = TodoState(todos: state.todos, jwt: jwt);
+      Fluttertoast.showToast(
+          msg: "Succesfully saved to jwt",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIosWeb: 1,
+          textColor: Colors.white,
+          fontSize: 16.0
+      );
+
+    } catch (e) {
+      print('Error saving JWT: $e');
+    }
   }
 
   void addTodo(Todo todo) {
-    state = [...state, todo];
-    _saveTodos();
+    state = TodoState(
+        todos: [...state.todos, todo],
+        jwt: state.jwt
+    );
+    _saveToJWT();
+    Fluttertoast.showToast(
+        msg: "succesfully saved jwt to storage",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+        timeInSecForIosWeb: 1,
+        textColor: Colors.white,
+        fontSize: 16.0
+    );
   }
 
   void updateTodo(Todo todo) {
-    state = [
-      for (final item in state)
-        if (item.id == todo.id) todo else item
-    ];
-    _saveTodos();
+    state = TodoState(
+        todos: [
+          for (final item in state.todos)
+            if (item.id == todo.id) todo else item
+        ],
+        jwt: state.jwt
+    );
+    _saveToJWT();
   }
 
   void deleteTodo(String id) {
-    state = state.where((todo) => todo.id != id).toList();
-    _saveTodos();
+    state = TodoState(
+        todos: state.todos.where((todo) => todo.id != id).toList(),
+        jwt: state.jwt
+    );
+    _saveToJWT();
   }
 
   void toggleTodoStatus(String id) {
-    state = [
-      for (final todo in state)
-        if (todo.id == id)
-          todo.copyWith(isCompleted: !todo.isCompleted)
-        else
-          todo
-    ];
-    _saveTodos();
+    state = TodoState(
+        todos: [
+          for (final todo in state.todos)
+            if (todo.id == id)
+              todo.copyWith(isCompleted: !todo.isCompleted)
+            else
+              todo
+        ],
+        jwt: state.jwt
+    );
+    _saveToJWT();
   }
 
-  List<Todo> sortByPriority() {
-    final sortedList = [...state];
-    sortedList.sort((a, b) => b.priority.index.compareTo(a.priority.index));
-    return sortedList;
+  bool isTokenValid() {
+    try {
+      if (state.jwt.isEmpty) return false;
+
+      final decodedToken = JwtDecoder.decode(state.jwt);
+      final expiry = DateTime.fromMillisecondsSinceEpoch(decodedToken['exp'] * 1000);
+
+      return DateTime.now().isBefore(expiry);
+    } catch (e) {
+      return false;
+    }
   }
 
-  List<Todo> filterByStatus(bool completed) {
-    return state.where((todo) => todo.isCompleted == completed).toList();
+  Future<void> clearState() async {
+    await _storage.delete(key: 'todo_jwt');
+    state = TodoState(todos: [], jwt: '');
   }
 }

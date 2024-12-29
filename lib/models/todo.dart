@@ -1,3 +1,5 @@
+enum Priority { low, medium, high }
+
 class Todo {
   final String id;
   final String title;
@@ -38,18 +40,28 @@ class Todo {
     };
   }
 
-  factory Todo.fromJson(Map<String, dynamic> json) {
+  static Todo fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      throw FormatException('Null JSON provided to Todo.fromJson');
+    }
+
     return Todo(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      isCompleted: json['isCompleted'],
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      isCompleted: json['isCompleted'] as bool? ?? false,
       priority: Priority.values.firstWhere(
-            (e) => e.toString() == json['priority'],
+            (e) => e.toString() == (json['priority'] as String?),
         orElse: () => Priority.low,
       ),
     );
   }
 }
 
-enum Priority { low, medium, high }
+// lib/models/todo_state.dart
+class TodoState {
+  final List<Todo> todos;
+  final String jwt;
+
+  TodoState({required this.todos, required this.jwt});
+}

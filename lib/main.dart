@@ -24,10 +24,7 @@ final router = GoRouter(
       path: '/edit/:id',
       builder: (context, state) {
         final todo = state.extra as Todo?;
-        if (todo == null) {
-          return const TodoFormScreen(); // Fallback if no todo is provided
-        }
-        return TodoFormScreen(todo: todo) as Widget; // Explicit cast to Widget
+        return TodoFormScreen(todo: todo);
       },
     ),
   ],
@@ -46,8 +43,6 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       routerConfig: router,
-
     );
-
   }
 }
